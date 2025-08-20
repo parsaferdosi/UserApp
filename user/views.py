@@ -1,5 +1,4 @@
 #ApiView based on DRF and django
-from user.models import Account
 from user.serializer import AccountSerializer
 
 from rest_framework.permissions import IsAuthenticated,AllowAny
