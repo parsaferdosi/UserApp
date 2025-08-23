@@ -1,13 +1,13 @@
 #ApiView based on DRF and django
 from user.serializer import AccountSerializer
-
-from rest_framework.permissions import IsAuthenticated,AllowAny
-from rest_framework.viewsets import ViewSet
+from user.models import Account
+from rest_framework.permissions import IsAuthenticated,AllowAny,IsAdminUser
+from rest_framework.viewsets import GenericViewSet,ModelViewSet
 from rest_framework.mixins import CreateModelMixin, RetrieveModelMixin, UpdateModelMixin, DestroyModelMixin
 from rest_framework.response import Response
 from rest_framework import status
 
-class AccountViewSet(CreateModelMixin, RetrieveModelMixin, UpdateModelMixin, DestroyModelMixin, ViewSet):
+class MyAccountViewSet(CreateModelMixin, RetrieveModelMixin, UpdateModelMixin, DestroyModelMixin, GenericViewSet):
     """AccountViewSet is a viewset for managing user accounts.
     It provides create, retrieve, update, and destroy operations for user accounts.
 
@@ -45,3 +45,13 @@ class AccountViewSet(CreateModelMixin, RetrieveModelMixin, UpdateModelMixin, Des
         instance = self.get_object()
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+class AdminAccountViewSet(ModelViewSet):
+    """AdminAccountViewSet is a viewset for managing user accounts by admin users.
+    It provides create, retrieve, update, and destroy operations for user accounts.
+
+    Args:
+        ModelViewSet: A viewset that provides default implementations for create, retrieve, update, partial_update, destroy, and list actions.
+    """
+    serializer_class = AccountSerializer
+    queryset = Account.objects.all()
+    permission_classes = [IsAdminUser]
