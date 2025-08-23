@@ -28,7 +28,7 @@ A reusable Django app that provides a customizable user system for all Django pr
        'user',
    ]
    ```
-   & at the end of `setting.py` file include this line
+   And at the end of `setting.py` file include this line
    ```python
    AUTH_USER_MODEL = 'user.Account'
    ```
