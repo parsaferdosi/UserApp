@@ -20,7 +20,7 @@ class AccountAdmin(UserAdmin):
             'fields': ('email', 'username', 'password1', 'password2')}
         ),
     )
-    filter_horizontal = ()
+    filter_horizontal = ('groups', 'user_permissions',)
     readonly_fields = ('created_at', 'last_updated')
 
 admin.site.register(Account, AccountAdmin)

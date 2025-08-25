@@ -1,10 +1,10 @@
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser
+from django.contrib.auth.models import AbstractBaseUser,PermissionsMixin
 from user.manager import CustomAccountManager
 from django.utils.translation import gettext_lazy as _
 
 
-class Account(AbstractBaseUser):
+class Account(AbstractBaseUser,PermissionsMixin):
     #base authentication fields
     email = models.EmailField(_("email adress"),unique=True)
     username = models.CharField(max_length=30, unique=True)
