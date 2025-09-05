@@ -16,7 +16,7 @@ class Account(AbstractBaseUser,PermissionsMixin):
     birth_date = models.DateField(null=True, blank=True)
     bio=models.TextField(blank=True, null=True)
     #status fields
-    # is_verified=models.BooleanField(default=False)
+    is_verified=models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
     #timestamps
