@@ -7,7 +7,7 @@ A reusable Django app that provides a customizable user system for all Django pr
 ## ✨ Features
 
 - 🔑 Custom user model (ready to extend)
-- 📧 Email & phone verification support(not implement)
+- 📧 Email & phone verification support
 - ✅ Authentication & permissions
 - ⚙️ Django REST Framework (DRF)
 - 📂 Clean and reusable structure
