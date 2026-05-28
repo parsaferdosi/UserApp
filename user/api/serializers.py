@@ -1,7 +1,7 @@
 import secrets
 
 from rest_framework import serializers
-from rest_framework.authtoken.models import Token
+from rest_framework_simplejwt.tokens import RefreshToken
 from user.models import Account
 from utils.code_generator import generate_numeric_code
 from utils.Redis import redis_manager
@@ -158,10 +158,11 @@ class AuthorizationSerializer(serializers.Serializer):
         if not user.is_active:
             raise serializers.ValidationError("حساب کاربری غیرفعال شده است.")
 
-        token, _ = Token.objects.get_or_create(user=user)
+        refresh = RefreshToken.for_user(user)
 
         return {
-            "token": token.key,
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
             "email": user.email,
             "username": user.username,
             "message": "ورود با موفقیت انجام شد.",
