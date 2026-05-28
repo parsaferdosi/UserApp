@@ -105,6 +105,18 @@ class RedisManager:
         # delete data from redis
         self.get_client(name).delete(key)
 
+    def incr_data(self, name, key, expire=None):
+        """
+        Atomically increment a counter key by 1 (Redis INCR).
+        Returns the new integer value after increment.
+        Optionally sets an expiry (in seconds) only on the first call (when value becomes 1).
+        """
+        client = self.get_client(name)
+        new_value = client.incr(key)
+        if expire and new_value == 1:
+            client.expire(key, expire)
+        return new_value
+
     # -------------------------
     # Queue operations (List)
     # -------------------------
