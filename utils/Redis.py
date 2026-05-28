@@ -44,7 +44,11 @@ class RedisManager:
 
     @property
     def _databases(self):
-        return getattr(settings, "REDIS_DATABASES", {})
+        return getattr(
+            settings,
+            "REDIS_DATABASES",
+            {"otp": 0, "cache": 1, "session": 2, "queue": 3},
+        )
 
     def get_client(self, name):
         """
