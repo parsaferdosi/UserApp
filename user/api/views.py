@@ -10,7 +10,13 @@ class RegisterView(generics.CreateAPIView):
 
 class ProfileView(generics.RetrieveUpdateAPIView):
     permission_classes=[IsAuthenticated]
-    serializer_class=serializers.ProfileSerializers
+    serializer_class=serializers.ProfileSerializer
+    
+    def get_object(self):
+        return self.request.user
 
 class DeleteAccountView(generics.DestroyAPIView):
     permission_classes=[IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
