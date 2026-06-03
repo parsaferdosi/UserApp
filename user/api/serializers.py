@@ -1,9 +1,11 @@
 import secrets
+from time import time
 
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from user.models import Account
 from utils.code_generator import generate_numeric_code
@@ -104,14 +106,14 @@ class LoginSerializer(serializers.Serializer):
             #and also for Capability reason.
             redis_manager.set_data("otp", f"2fa:session:{session_token}", session_data, expire=120)
         except Exception as e:
-            raise serializers.ValidationError(_(f"خطا در ارتباط با حافظه موقت (Redis),{e}.")) from e
+            raise serializers.ValidationError(_("خطا در ارتباط با حافظه موقت (Redis).")) from e
 
         # Send SMS
         try:
             sms = get_sms_provider()
             sms.send_sms(user.phone_number, f"کد تایید ورود شما: {otp_code}")
         except Exception as e:
-            raise serializers.ValidationError(_(f"ارسال پیامک با خطا مواجه شد.{e}")) from e
+            raise serializers.ValidationError(_("ارسال پیامک با خطا مواجه شد.")) from e
         # Return formatted response data to the view
         return {"session_token": session_token, "message": "کد تایید با موفقیت پیامک شد."}
 
@@ -178,10 +180,46 @@ class AuthorizationSerializer(serializers.Serializer):
 
         refresh = RefreshToken.for_user(user)
 
+        exp=refresh["exp"]
+        ttl=exp-int(time())
+        try:
+            redis_manager.set_data(
+                "session",
+                refresh["jti"],
+                str(user.id),
+                ttl,
+            )
+        except Exception as e:
+            raise serializers.ValidationError(_("خطا در هنگام ورود به سیستم،لطفا مجددا تلاش کنید")) from e  # noqa: E501
+
         return {
             "refresh": str(refresh),
             "access": str(refresh.access_token),
-            "email": user.email,
-            "username": user.username,
             "message": "ورود با موفقیت انجام شد.",
         }
+
+class CustomTokenRefreshSerializer(TokenRefreshSerializer):
+    def validate(self, attrs):
+        old_refresh = RefreshToken(attrs["refresh"])
+
+        if not redis_manager.exist_data(
+            "session",
+            old_refresh["jti"]
+        ):
+            raise serializers.ValidationError(_("نشست کاربر منقضی شده است"))
+
+        data = super().validate(attrs)
+
+        new_refresh = RefreshToken(data["refresh"])
+        user_id=str(new_refresh["user_id"])
+        ttl = new_refresh["exp"] - int(time())
+
+        redis_manager.update_data(
+            "session",
+            old_refresh["jti"],
+            user_id,
+            new_refresh["jti"],
+            ttl
+        )
+
+        return data

@@ -77,6 +77,7 @@ class RedisManager:
                 password=self._password,
                 db=db_number,
                 decode_responses=True,
+                health_check_interval=30
             )
 
         return redis.Redis(connection_pool=self._pools[name])
@@ -104,6 +105,32 @@ class RedisManager:
     def delete_data(self, name, key):
         # delete data from redis
         self.get_client(name).delete(key)
+
+    def update_data(self,name,fetch_key,new_data,new_key=None,expire=None):
+        #update data in redis,use pipline to make it bulletproof from race condition
+
+        new_key=new_key or fetch_key
+        client=self.get_client(name)
+        
+        if new_key==fetch_key:
+            try:
+                client.set(new_key,json.dumps(new_data),ex=expire)
+            except Exception as e:
+                raise RuntimeError(f"Redis UPDATE (SET) failed: {e}") from e
+            return
+        try:
+            pipeline = client.pipeline(transaction=True)
+            pipeline.delete(fetch_key)
+            pipeline.set(new_key,json.dumps(new_data),ex=expire)
+            pipeline.execute()
+        except Exception as e:
+            raise RuntimeError(f"Redis UPDATE (Pipeline) failed: {e}") from e
+    
+    def exist_data(self,name,key):
+        try:
+            return bool(self.get_client(name).exists(key))
+        except Exception as e:
+            raise RuntimeError(f"Redis EXISTS failed: {e}") from e
 
     def incr_data(self, name, key, expire=None):
         """

@@ -1,6 +1,7 @@
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from . import serializers
 
@@ -47,3 +48,6 @@ class DeleteAccountView(generics.DestroyAPIView):
 
     def get_object(self):
         return self.request.user
+
+class CustomTokenRefreshView(TokenRefreshView):
+    serializer_class=serializers.CustomTokenRefreshSerializer
