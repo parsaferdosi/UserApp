@@ -77,7 +77,7 @@ class RedisManager:
                 password=self._password,
                 db=db_number,
                 decode_responses=True,
-                health_check_interval=30
+                health_check_interval=30,
             )
 
         return redis.Redis(connection_pool=self._pools[name])
@@ -106,27 +106,27 @@ class RedisManager:
         # delete data from redis
         self.get_client(name).delete(key)
 
-    def update_data(self,name,fetch_key,new_data,new_key=None,expire=None):
-        #update data in redis,use pipline to make it bulletproof from race condition
+    def update_data(self, name, fetch_key, new_data, new_key=None, expire=None):
+        # update data in redis,use pipline to make it bulletproof from race condition
 
-        new_key=new_key or fetch_key
-        client=self.get_client(name)
-        
-        if new_key==fetch_key:
+        new_key = new_key or fetch_key
+        client = self.get_client(name)
+
+        if new_key == fetch_key:
             try:
-                client.set(new_key,json.dumps(new_data),ex=expire)
+                client.set(new_key, json.dumps(new_data), ex=expire)
             except Exception as e:
                 raise RuntimeError(f"Redis UPDATE (SET) failed: {e}") from e
             return
         try:
             pipeline = client.pipeline(transaction=True)
             pipeline.delete(fetch_key)
-            pipeline.set(new_key,json.dumps(new_data),ex=expire)
+            pipeline.set(new_key, json.dumps(new_data), ex=expire)
             pipeline.execute()
         except Exception as e:
             raise RuntimeError(f"Redis UPDATE (Pipeline) failed: {e}") from e
-    
-    def exist_data(self,name,key):
+
+    def exist_data(self, name, key):
         try:
             return bool(self.get_client(name).exists(key))
         except Exception as e:
@@ -136,13 +136,14 @@ class RedisManager:
         """
         Atomically increment a counter key by 1 (Redis INCR).
         Returns the new integer value after increment.
-        Optionally sets an expiry (in seconds) only on the first call (when value becomes 1).
+        Note: if the key does not exist, it will be created with a value of 1.
         """
         client = self.get_client(name)
-        new_value = client.incr(key)
-        if expire and new_value == 1:
-            client.expire(key, expire)
-        return new_value
+        pipeline = client.pipeline(transaction=True)
+        pipeline.incr(key)
+        if expire:
+            pipeline.expire(key, expire)
+        return pipeline.execute()[0]
 
     # -------------------------
     # Queue operations (List)

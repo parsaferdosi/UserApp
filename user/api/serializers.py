@@ -1,6 +1,7 @@
 import secrets
 from time import time
 
+from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
@@ -36,53 +37,57 @@ class RegisterSerializer(serializers.ModelSerializer):
 class ProfileReterieveSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
-        fields = ("id",
-                  "email",
-                  "username",
-                  "phone_number",
-                  "created_at",
-                  "last_updated",
-                  "is_active",
-                  "is_verified")
+        fields = (
+            "id",
+            "email",
+            "username",
+            "phone_number",
+            "created_at",
+            "last_updated",
+            "is_active",
+            "is_verified",
+        )
+
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
-        model=Account
-        fields=("email","username","phone_number")
-        
+        model = Account
+        fields = ("email", "username", "phone_number")
+
+
 class ChangePasswordSerialzier(serializers.Serializer):
-    old_password=serializers.CharField(required=True)
-    new_password0=serializers.CharField(required=True)
-    new_password1=serializers.CharField(required=True)
-    
+    old_password = serializers.CharField(required=True)
+    new_password0 = serializers.CharField(required=True)
+    new_password1 = serializers.CharField(required=True)
+
     def validate(self, attrs):
-        user=self.instance
-        old_password = attrs.get('old_password')
-        new_password0 = attrs.get('new_password0')
-        new_password1 = attrs.get('new_password1')
-        
+        user = self.instance
+        old_password = attrs.get("old_password")
+        new_password0 = attrs.get("new_password0")
+        new_password1 = attrs.get("new_password1")
+
         if not user.check_password(old_password):
             raise serializers.ValidationError(_("رمز عبور فعلی اشتباه است"))
         if new_password0 != new_password1:
             raise serializers.ValidationError(_("رمز های عبور جدید با هم مطابقت ندارند"))
         try:
-            validate_password(new_password0,user)
+            validate_password(new_password0, user)
         except DjangoValidationError as e:
             raise serializers.ValidationError(_({"new_password0": list(e.messages)})) from e
 
         return attrs
-    
-    def save(self,**kwargs):
-        user=self.instance
-        new_password=self.validated_data['new_password0']
+
+    def save(self, **kwargs):
+        user = self.instance
+        new_password = self.validated_data["new_password0"]
         user.set_password(new_password)
         user.save()
         return user
 
+
 class LoginSerializer(serializers.Serializer):
     username_or_email = serializers.CharField(required=True)
     password = serializers.CharField(write_only=True, required=True)
-
 
     def is_email(self, value):
         try:
@@ -91,18 +96,17 @@ class LoginSerializer(serializers.Serializer):
         except DjangoValidationError:
             return False
 
-    def get_user(self,username_or_email):
+    def get_user(self, username_or_email):
         try:
-            user=None
+            user = None
             if username_or_email:
                 if self.is_email(username_or_email):
-                    user=Account.objects.get(email=username_or_email)
+                    user = Account.objects.get(email=username_or_email)
                 else:
-                    user=Account.objects.get(username=username_or_email)
+                    user = Account.objects.get(username=username_or_email)
             return user
         except Account.DoesNotExist:
             return None
-    
 
     def validate(self, attrs):
         username_or_email = attrs.get("username_or_email")
@@ -129,10 +133,9 @@ class LoginSerializer(serializers.Serializer):
         # Store only immutable data in Redis — attempts are tracked separately
         session_data = {"user_id": user.id, "code": otp_code}
         try:
-            #Note: OTP expire time has hardcoded to a default of 2 minutes (120 seconds)
-            #Becuase I was to lazy to set it dyanamic from main setting in django
-            #and also for Capability reason.
-            redis_manager.set_data("otp", f"2fa:session:{session_token}", session_data, expire=120)
+            # Use TTL from settings, default to 120 seconds (2 minutes)
+            ttl = getattr(settings, "TTL_2FA", 120)
+            redis_manager.set_data("otp", f"2fa:session:{session_token}", session_data, expire=ttl)
         except Exception as e:
             raise serializers.ValidationError(_("خطا در ارتباط با حافظه موقت (Redis).")) from e
 
@@ -150,7 +153,7 @@ class AuthorizationSerializer(serializers.Serializer):
     session_token = serializers.CharField(required=True)
     otp_code = serializers.CharField(max_length=6, min_length=6, required=True)
 
-    MAX_ATTEMPTS = 3
+    MAX_ATTEMPTS = getattr(settings, "MAX_2FA_ATTEMPTS", 3)
 
     def validate(self, attrs):
         session_token = attrs.get("session_token")
@@ -174,7 +177,7 @@ class AuthorizationSerializer(serializers.Serializer):
             attempts = redis_manager.incr_data(
                 "otp",
                 attempts_key,
-                expire=120,
+                expire=getattr(settings, "TTL_2FA", 120),
             )
 
             remaining = self.MAX_ATTEMPTS - attempts
@@ -183,13 +186,13 @@ class AuthorizationSerializer(serializers.Serializer):
                 redis_manager.delete_data("otp", session_key)
                 redis_manager.delete_data("otp", attempts_key)
 
-                raise serializers.ValidationError(_(
-                    "تعداد دفعات تلاش بیش از حد مجاز است. لطفا مجددا لاگین کنید."
-                ))
+                raise serializers.ValidationError(
+                    _("تعداد دفعات تلاش بیش از حد مجاز است. لطفا مجددا لاگین کنید.")
+                )
 
-            raise serializers.ValidationError(_(
-                {"otp_code": f"کد تایید اشتباه است. {remaining} تلاش باقی مانده است."}
-            ))
+            raise serializers.ValidationError(
+                _({"otp_code": f"کد تایید اشتباه است. {remaining} تلاش باقی مانده است."})
+            )
         # Success — clean up both keys
         redis_manager.delete_data("otp", session_key)
         redis_manager.delete_data("otp", attempts_key)
@@ -197,7 +200,7 @@ class AuthorizationSerializer(serializers.Serializer):
         return {"user_id": user_id}
 
     def generate_token(self):
-        user_id=self.validated_data["user_id"]
+        user_id = self.validated_data["user_id"]
         try:
             user = Account.objects.get(id=user_id)
         except Account.DoesNotExist:
@@ -208,8 +211,8 @@ class AuthorizationSerializer(serializers.Serializer):
 
         refresh = RefreshToken.for_user(user)
 
-        exp=refresh["exp"]
-        ttl=exp-int(time())
+        exp = refresh["exp"]
+        ttl = exp - int(time())
         try:
             redis_manager.set_data(
                 "session",
@@ -218,52 +221,48 @@ class AuthorizationSerializer(serializers.Serializer):
                 ttl,
             )
         except Exception as e:
-            raise serializers.ValidationError(_("خطا در هنگام ورود به سیستم،لطفا مجددا تلاش کنید")) from e  # noqa: E501
+            raise serializers.ValidationError(
+                _("خطا در هنگام ورود به سیستم،لطفا مجددا تلاش کنید")
+            ) from e  # noqa: E501
 
         return {
             "refresh": str(refresh),
             "access": str(refresh.access_token),
             "message": "ورود با موفقیت انجام شد.",
         }
-        
+
+
 class LogoutSerializer(serializers.Serializer):
-    refresh=serializers.CharField(required=True)
-    
-    def validate(self,attrs):
-        self.token=attrs["refresh"]
+    refresh = serializers.CharField(required=True)
+
+    def validate(self, attrs):
+        self.token = attrs["refresh"]
         return attrs
-    def save(self,**kwargs):
+
+    def save(self, **kwargs):
         try:
-            refresh_token=RefreshToken(self.token)
-            jti=refresh_token['jti']
-            redis_manager.delete_data("sesstion",jti)
+            refresh_token = RefreshToken(self.token)
+            jti = refresh_token["jti"]
+            redis_manager.delete_data("session", jti)
         except TokenError as e:
-            raise serializers.ValidationError(_("توکن نا معتبر است یا قبلا منقظی شده است"))from e
+            raise serializers.ValidationError(_("توکن نا معتبر است یا قبلا منقظی شده است")) from e
         except Exception as e:
             raise serializers.ValidationError(_("خطا در عملیات خروج. لطفا مجددا تلاش کنید.")) from e
+
 
 class CustomTokenRefreshSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
         old_refresh = RefreshToken(attrs["refresh"])
 
-        if not redis_manager.exist_data(
-            "session",
-            old_refresh["jti"]
-        ):
+        if not redis_manager.exist_data("session", old_refresh["jti"]):
             raise serializers.ValidationError(_("نشست کاربر منقضی شده است"))
 
         data = super().validate(attrs)
 
         new_refresh = RefreshToken(data["refresh"])
-        user_id=str(new_refresh["user_id"])
+        user_id = str(new_refresh["user_id"])
         ttl = new_refresh["exp"] - int(time())
 
-        redis_manager.update_data(
-            "session",
-            old_refresh["jti"],
-            user_id,
-            new_refresh["jti"],
-            ttl
-        )
+        redis_manager.update_data("session", old_refresh["jti"], user_id, new_refresh["jti"], ttl)
 
         return data
